@@ -2,8 +2,8 @@ package com.herminio.superduper.pancake.sender;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.stereotype.Service;
 
@@ -18,13 +18,14 @@ import com.azure.core.util.polling.PollerFlux;
 @Service
 public class AsyncEmailSender implements Sender {
 
+    private static final Duration TIMEOUT = Duration.ofSeconds(30);
+
     @Override
     public void send(List<EmailAddress> to, String subject, String body) {
 
         final String connectionString = System.getenv("AZURE_EMAIL_CONNECTION_STRING");
         final String senderAddress = "<DoNotReply@780142e5-8660-46de-95ba-ae2be5e22635.azurecomm.net>";
 
-         // Implementation for sending email
         System.out.println("Sending email to: " + to);
         System.out.println("Subject: " + subject);
         System.out.println("Body: " + body);
@@ -37,51 +38,45 @@ public class AsyncEmailSender implements Sender {
             .setSenderAddress(senderAddress)
             .setToRecipients(to)
             .setSubject(subject)
-            //.setBodyPlainText(body);
             .setBodyHtml(body);
 
         try {
-            
-            Duration MAIN_THREAD_WAIT_TIME = Duration.ofSeconds(30);
-
-            // ExecutorService to run the polling in a separate thread
-            ExecutorService executorService = Executors.newSingleThreadExecutor();
+            // CountDownLatch para aguardar a conclusão da operação
+            CountDownLatch latch = new CountDownLatch(1);
 
             PollerFlux<EmailSendResult, EmailSendResult> poller = emailClient.beginSend(message);
 
-            executorService.submit(() -> {
-                // The initial request is sent out as soon as we subscribe the to PollerFlux object
-                poller.subscribe(
-                    response -> {
-                        if (response.getStatus() == LongRunningOperationStatus.SUCCESSFULLY_COMPLETED) {
-                            System.out.printf("Successfully sent the email (operation id: %s)\n", response.getValue().getId());
-                        }
-                        else {
-                            // The operation ID can be retrieved as soon as the first response is received from the PollerFlux.
-                            System.out.println("Email send status: " + response.getStatus() + ", operation id: " + response.getValue().getId());
-                        }
-                    },
-                    error -> {
-                        System.out.println("Error occurred while sending email: " + error.getMessage());
+            poller.subscribe(
+                response -> {
+                    if (response.getStatus() == LongRunningOperationStatus.SUCCESSFULLY_COMPLETED) {
+                        System.out.printf("Successfully sent the email (operation id: %s)\n", response.getValue().getId());
+                        latch.countDown(); // Libera a thread principal
+                    } else if (response.getStatus() == LongRunningOperationStatus.FAILED) {
+                        System.out.println("Email send failed, operation id: " + response.getValue().getId());
+                        latch.countDown(); // Libera mesmo em caso de falha
+                    } else {
+                        System.out.println("Email send status: " + response.getStatus() + ", operation id: " + response.getValue().getId());
                     }
-                );
-            });
+                },
+                error -> {
+                    System.out.println("Error occurred while sending email: " + error.getMessage());
+                    latch.countDown(); // Libera em caso de erro
+                }
+            );
 
-        // In a real application, you might have a mechanism to keep the main thread alive.
-        // For this sample we will keep the main thread alive for 30 seconds to make sure the child thread has time to receive the SUCCESSFULLY_COMPLETED status.
-        try {
-            Thread.sleep(MAIN_THREAD_WAIT_TIME.toMillis());
+            // Aguarda até a conclusão ou timeout
+            boolean completed = latch.await(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+            if (!completed) {
+                System.out.println("Timeout: Email operation did not complete within " + TIMEOUT.toSeconds() + " seconds");
+            }
+
+            System.out.println("Email operation finished.");
+
         } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        executorService.shutdown();
-        System.out.println("Main thread ends.");
-
+            Thread.currentThread().interrupt();
+            System.out.println("Thread interrupted: " + e.getMessage());
         } catch (Exception exception) {
             System.out.println(exception.getMessage());
         }
-    
     }
-
 }
