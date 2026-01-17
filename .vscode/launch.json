@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-PancakeApplication<pancake>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.herminio.superduper.pancake.PancakeApplication",
+            "projectName": "pancake",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

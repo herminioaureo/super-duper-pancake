@@ -26,10 +26,6 @@ public class AsyncEmailSender implements Sender {
         final String connectionString = System.getenv("AZURE_EMAIL_CONNECTION_STRING");
         final String senderAddress = "<DoNotReply@780142e5-8660-46de-95ba-ae2be5e22635.azurecomm.net>";
 
-        System.out.println("Sending email to: " + to);
-        System.out.println("Subject: " + subject);
-        System.out.println("Body: " + body);
-
         EmailAsyncClient emailClient = new EmailClientBuilder()
             .connectionString(connectionString)
             .buildAsyncClient();
