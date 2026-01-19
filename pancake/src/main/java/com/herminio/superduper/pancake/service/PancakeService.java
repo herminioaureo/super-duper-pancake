@@ -2,7 +2,6 @@ package com.herminio.superduper.pancake.service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,10 +14,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.azure.communication.email.models.EmailAddress;
+import com.herminio.superduper.pancake.dto.ContactDTO;
+import com.herminio.superduper.pancake.dto.ResponseDTO;
+import com.herminio.superduper.pancake.exception.PancakeException;
 import com.herminio.superduper.pancake.model.Contact;
+import com.herminio.superduper.pancake.model.Response;
 import com.herminio.superduper.pancake.sender.Sender;
+import com.herminio.superduper.pancake.util.Util;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @RestController
 @RequestMapping("pancake")
 public class PancakeService {
@@ -32,18 +38,34 @@ public class PancakeService {
     @PostMapping(path = "sendMessage",
 			consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Contact> sendMessage(@RequestBody List<Contact> contact) {
-        // Logic to save pancake
+    public ResponseEntity<Response> sendMessage(@RequestBody List<Contact> contact) {
+        
+        ResponseDTO responseDto = new ResponseDTO();    
+        List<ContactDTO> contacts = Util.convertContactToDTO(contact);
+        
+        String content;
 
-        List<EmailAddress> toEmailAddresses = new ArrayList<EmailAddress>();
-        EmailAddress emailAddress;
-
-        for (Contact contactElement : contact) {
-            emailAddress = new EmailAddress(contactElement.getEmail());
-            emailAddress.setDisplayName(contactElement.getName());
-            toEmailAddresses.add(emailAddress);
+        try {
+            log.info("Loading email template...");
+            content = loadEmailTemplate();
+            emailSender.send(contacts, "🍩 Super Duper Pancake - Welcome!", content, responseDto);
+        } catch (PancakeException e) {
+            Response response = new Response();
+            response.setStatus("FAILED");
+            response.setErrorCode(e.getErrorCode());
+            response.setMessage(e.getMessage());
+            response.addDetail(e.toString());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
 
+        // Converte ResponseDTO para Response
+        Response response = Util.convertDtoToResponse(responseDto);
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @SuppressWarnings("null")
+    private String loadEmailTemplate() throws PancakeException {
         String content = "";
         try {
             content = new String(
@@ -51,13 +73,10 @@ public class PancakeService {
                     .getContentAsString(StandardCharsets.UTF_8)
             );
         } catch (IOException e) {
-            e.printStackTrace();
-            
+            throw new PancakeException("PANCAKE-002", "Failed to load email template", e);
         }
 
-        emailSender.send(toEmailAddresses, "🍩 Super Duper Pancake - Welcome!", content.formatted(contact.get(0)));
-
-        return ResponseEntity.status(HttpStatus.OK).build();
+        return content;
     }
 
 }
