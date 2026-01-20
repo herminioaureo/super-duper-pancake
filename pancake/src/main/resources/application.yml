@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: pancake
+  profiles:
+    active: dev
+
+pancake:
+  email:
+    timeout-seconds: 30
+
+logging:
+  level:
+    root: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: super-duper-pancake.log

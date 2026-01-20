@@ -46,6 +46,5 @@ public class Util {
         dto.getDetails().forEach(response::addDetail);
         return response;
     }
-
     
 }
