@@ -40,24 +40,15 @@ public class PancakeService {
 			consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
     @CircuitBreaker(name = "superDuperPancakeCircuitBreaker", fallbackMethod = "fallback")
-    public ResponseEntity<Response> sendMessage(@RequestBody List<Contact> contact) {
+    public ResponseEntity<Response> sendMessage(@RequestBody List<Contact> contactList) throws PancakeException {
+        log.info("Received sendMessage request with {} contacts.", contactList.size());
         
         ResponseDTO responseDto = new ResponseDTO();    
-        List<ContactDTO> contacts = Util.convertContactToDTO(contact);
-        
-        String content;
-
-        try {
-            log.info("Loading email template...");
-            content = loadEmailTemplate();
-            emailSender.send(contacts, "🍩 Super Duper Pancake - Welcome!", content, responseDto);
-        } catch (PancakeException e) {
-            Response response = new Response();
-            response.setStatus("FAILED");
-            response.setErrorCode(e.getErrorCode());
-            response.setMessage(e.getMessage());
-            response.addDetail(e.toString());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        List<ContactDTO> contacts = Util.convertContactToDTO(contactList);
+     
+        // Enviando email para cada contato com sua mensagem específica
+        for (ContactDTO contact : contacts) {
+            emailSender.send(contact, "🍩 Super Duper Pancake - Welcome!", contact.message(), responseDto);
         }
 
         Response response = Util.convertDtoToResponse(responseDto);

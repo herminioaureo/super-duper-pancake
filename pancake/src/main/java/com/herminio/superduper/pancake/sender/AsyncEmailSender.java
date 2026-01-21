@@ -32,7 +32,7 @@ public class AsyncEmailSender implements Sender {
     private boolean forceError;
 
     @Override
-    public void send(List<ContactDTO> contacts, String subject, String body, ResponseDTO responseDto) throws PancakeException {
+    public void send(ContactDTO contacts, String subject, String body, ResponseDTO responseDto) throws PancakeException {
 
         // Forçar erro para teste do circuit breaker
         if (forceError) {
@@ -41,7 +41,7 @@ public class AsyncEmailSender implements Sender {
         }
 
         log.info("Starting process to send email...");
-        List<EmailAddress> to = Util.convertToEmailAddress(contacts);
+        EmailAddress to = Util.convertToEmailAddress(contacts);
 
         final String connectionString = System.getenv("AZURE_EMAIL_CONNECTION_STRING");
         final String senderAddress = "<DoNotReply@780142e5-8660-46de-95ba-ae2be5e22635.azurecomm.net>";
@@ -50,19 +50,20 @@ public class AsyncEmailSender implements Sender {
             .connectionString(connectionString)
             .buildAsyncClient();
 
-        for (int i = 0; i < to.size(); i++) {
-            EmailAddress emailAddress = to.get(i);
-
-            if (!Util.isValidEmail(emailAddress.getAddress())) {
-                log.info("Invalid recipient email address: " + emailAddress.getAddress());
-                responseDto.setStatus("PARTIALLY SUCCESS");
-                responseDto.setMessage("Message sent with some invalid email addresses");
-                responseDto.addDetail("Invalid recipient email address: " + emailAddress.getAddress());
-                to.remove(i);
-                i--;
-            }
+        if (Util.isValidEmail(to.getAddress())) {
+            log.info("Recipient email address is valid: " + to.getAddress());
+            sendEmail(subject, body, responseDto, to, senderAddress, emailClient);
+        } else {
+            log.info("Invalid recipient email address: " + to.getAddress());
+            responseDto.setStatus("PARTIALLY SUCCESS");
+            responseDto.setMessage("Message sent with some invalid email addresses");
+            responseDto.addDetail("Invalid recipient email address: " + to.getAddress());
         }
+       
+    }
 
+    private void sendEmail(String subject, String body, ResponseDTO responseDto, EmailAddress to,
+            final String senderAddress, EmailAsyncClient emailClient) throws PancakeException {
         EmailMessage message = new EmailMessage()
             .setSenderAddress(senderAddress)
             .setToRecipients(to)

@@ -24,18 +24,14 @@ public class Util {
 
     public static List<ContactDTO> convertContactToDTO(List<Contact> contacts) {
         return contacts.stream()
-            .map(contact -> new ContactDTO(contact.getName(), contact.getEmail()))
+            .map(contact -> new ContactDTO(contact.getName(), contact.getEmail(), contact.getMessage()))
             .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    public static List<EmailAddress> convertToEmailAddress(List<ContactDTO> contacts) {
-        return contacts.stream()
-            .map(contact -> {
-                EmailAddress emailAddress = new EmailAddress(contact.email());
-                emailAddress.setDisplayName(contact.name());
-                return emailAddress;
-            })
-            .collect(Collectors.toCollection(ArrayList::new));
+    public static EmailAddress convertToEmailAddress(ContactDTO contact) {
+        EmailAddress emailAddress = new EmailAddress(contact.email());
+        emailAddress.setDisplayName(contact.name());
+        return emailAddress;
     }
 
     public static Response convertDtoToResponse(ResponseDTO dto) {

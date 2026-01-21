@@ -11,5 +11,7 @@ public class Contact {
     private String name;
     @Getter @Setter
     private String email;
+    @Getter @Setter
+    private String message;
 
 }
