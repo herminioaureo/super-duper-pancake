@@ -7,6 +7,7 @@ spring:
 pancake:
   email:
     timeout-seconds: 30
+    force-error: false    # Mude para false para desabilitar erro forçado
 
 logging:
   level:
@@ -15,3 +16,27 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: super-duper-pancake.log
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      superDuperPancakeCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowSize: 2
+        minimumNumberOfCalls: 1
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+        permittedNumberOfCallsInHalfOpenState: 1
+        automaticTransitionFromOpenToHalfOpenEnabled: false   
+
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+  health:
+    circuitbreakers:
+      enabled: true

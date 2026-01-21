@@ -22,6 +22,7 @@ import com.herminio.superduper.pancake.model.Response;
 import com.herminio.superduper.pancake.sender.Sender;
 import com.herminio.superduper.pancake.util.Util;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -38,6 +39,7 @@ public class PancakeService {
     @PostMapping(path = "sendMessage",
 			consumes = MediaType.APPLICATION_JSON_VALUE,
 			produces = MediaType.APPLICATION_JSON_VALUE)
+    @CircuitBreaker(name = "superDuperPancakeCircuitBreaker", fallbackMethod = "fallback")
     public ResponseEntity<Response> sendMessage(@RequestBody List<Contact> contact) {
         
         ResponseDTO responseDto = new ResponseDTO();    
@@ -58,7 +60,6 @@ public class PancakeService {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
 
-        // Converte ResponseDTO para Response
         Response response = Util.convertDtoToResponse(responseDto);
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
@@ -77,6 +78,18 @@ public class PancakeService {
         }
 
         return content;
+    }
+
+    public ResponseEntity<Response> fallback(Throwable t) {
+        log.error("Circuit breaker fallback triggered: " + t.getMessage());
+
+        Response response = new Response();
+        response.setStatus("FAILED");
+        response.setErrorCode("PANCAKE-ERR-999");
+        response.setMessage("Service is currently unavailable. Please try again later.");
+        response.addDetail(t.toString());
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 
 }

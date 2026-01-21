@@ -9,8 +9,8 @@ public class PancakeException extends Exception {
         this.errorCode = errorCode;
     }
 
-    public PancakeException(String errorCode, String message, Exception exception) {
-        super(message, exception);
+    public PancakeException(String errorCode, String message, Throwable cause) {
+        super(message, cause);
         this.errorCode = errorCode;
     }
 

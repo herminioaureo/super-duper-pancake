@@ -1,6 +1,5 @@
 package com.herminio.superduper.pancake.sender;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -29,8 +28,17 @@ public class AsyncEmailSender implements Sender {
     @Value("${pancake.email.timeout-seconds:15}")
     private long timeoutSeconds;
 
+    @Value("${pancake.email.force-error:false}")
+    private boolean forceError;
+
     @Override
     public void send(List<ContactDTO> contacts, String subject, String body, ResponseDTO responseDto) throws PancakeException {
+
+        // Forçar erro para teste do circuit breaker
+        if (forceError) {
+            log.error("Forced error enabled - throwing exception for circuit breaker test");
+            throw new PancakeException("PANCAKE-TEST-001", "Forced error for circuit breaker testing");
+        }
 
         log.info("Starting process to send email...");
         List<EmailAddress> to = Util.convertToEmailAddress(contacts);
@@ -41,7 +49,6 @@ public class AsyncEmailSender implements Sender {
         EmailAsyncClient emailClient = new EmailClientBuilder()
             .connectionString(connectionString)
             .buildAsyncClient();
-
 
         for (int i = 0; i < to.size(); i++) {
             EmailAddress emailAddress = to.get(i);
@@ -65,6 +72,7 @@ public class AsyncEmailSender implements Sender {
         try {
             // CountDownLatch para aguardar a conclusão da operação
             CountDownLatch latch = new CountDownLatch(1);
+            final PancakeException[] asyncException = new PancakeException[1]; // Para capturar exceção do callback
             PollerFlux<EmailSendResult, EmailSendResult> poller = emailClient.beginSend(message);
 
             poller.subscribe(
@@ -74,10 +82,7 @@ public class AsyncEmailSender implements Sender {
                         latch.countDown(); // Libera a thread principal
                     } else if (response.getStatus() == LongRunningOperationStatus.FAILED) {
                         log.error("Email send failed, operation id: " + response.getValue().getId());
-                        responseDto.setStatus("FAILED");
-                        responseDto.setMessage("Failed to send email");
-                        responseDto.setErrorCode("PANCAKE-ERR-001"); // TODO: Definir código de erro apropriado
-                        responseDto.addDetail("Email send failed, operation id: " + response.getValue().getId());
+                        asyncException[0] = new PancakeException("PANCAKE-ERR-001", "Failed to send email, operation id: " + response.getValue().getId());
                         latch.countDown(); // Libera mesmo em caso de falha
                     } else {
                         log.info("Email send status: " + response.getStatus() + ", operation id: " + response.getValue().getId());
@@ -85,10 +90,7 @@ public class AsyncEmailSender implements Sender {
                 },
                 error -> {
                     log.error("Error occurred while sending email: " + error.getMessage());
-                    responseDto.setStatus("FAILED");
-                    responseDto.setMessage("Error occurred while sending email");
-                    responseDto.setErrorCode("PANCAKE-ERR-002"); // TODO: Definir código de erro apropriado
-                    responseDto.addDetail("Error occurred while sending email: " + error.getMessage());
+                    asyncException[0] = new PancakeException("PANCAKE-ERR-002", "Error occurred while sending email: " + error.getMessage(), error);
                     latch.countDown(); // Libera em caso de erro
                 }
             );
@@ -97,10 +99,17 @@ public class AsyncEmailSender implements Sender {
             boolean completed = latch.await(timeoutSeconds, TimeUnit.SECONDS);
             if (!completed) {
                 log.warn("Timeout: Email operation did not complete within " + timeoutSeconds + " seconds");
+                throw new PancakeException("PANCAKE-ERR-003", "Timeout: Email operation did not complete within " + timeoutSeconds + " seconds");
+            }
+
+            // Verifica se houve exceção assíncrona
+            if (asyncException[0] != null) {
+                throw asyncException[0];
             }
 
             // Define o status baseado se houve emails inválidos
             if (responseDto.getDetails().isEmpty()) {
+                responseDto.setErrorCode("0");
                 responseDto.setStatus("SUCCESS");
                 responseDto.setMessage("Message sent successfully to all recipients");
             }
@@ -110,8 +119,12 @@ public class AsyncEmailSender implements Sender {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Thread interrupted: " + e.getMessage());
+            throw new PancakeException("PANCAKE-ERR-004", "Thread interrupted while sending email", e);
+        } catch (PancakeException e) {
+            throw e; // Relança PancakeException
         } catch (Exception exception) {
             log.error("Unexpected error: " + exception.getMessage());
+            throw new PancakeException("PANCAKE-ERR-005", "Unexpected error while sending email: " + exception.getMessage(), exception);
         }
     }
 }
